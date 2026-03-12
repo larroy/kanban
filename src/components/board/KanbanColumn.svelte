@@ -32,12 +32,19 @@
 	let adding = $state(false);
 
 	function onEnd(evt: import('sortablejs').SortableEvent) {
-		// Revert SortableJS's DOM change — let Svelte's reactivity own the DOM
-		evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] ?? null);
-
 		const id = parseInt(evt.item.dataset.id ?? '');
 		const toStatus = evt.to.dataset.status as string;
 		const newIndex = evt.newIndex ?? 0;
+
+		// Revert SortableJS's DOM change — let Svelte's reactivity own the DOM
+		if (evt.from !== evt.to) {
+			// Cross-column: remove entirely so Svelte recreates in the right column
+			evt.item.remove();
+		} else {
+			// Same-column: revert to original position
+			evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] ?? null);
+		}
+
 		if (!isNaN(id)) {
 			board.moveTask(id, toStatus, newIndex);
 		}
@@ -76,12 +83,12 @@
 	}
 </script>
 
-<div class="flex w-80 shrink-0 flex-col rounded-xl bg-gray-50 p-3">
+<div class="flex w-80 shrink-0 flex-col rounded-xl bg-gray-50 p-3" data-testid="column-{status}">
 	<div class="mb-3 flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span class="h-2.5 w-2.5 rounded-full {color}"></span>
 			<h2 class="font-semibold text-gray-800">{label}</h2>
-			<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+			<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600" data-testid="column-count-{status}">
 				{tasks.length}
 			</span>
 		</div>
@@ -89,6 +96,7 @@
 			onclick={() => (addOpen = true)}
 			class="rounded-lg p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
 			title="Add task"
+			data-testid="add-task-btn-{status}"
 		>
 			<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -99,6 +107,7 @@
 	<div
 		class="flex min-h-24 flex-col gap-2"
 		data-status={status}
+		data-testid="task-list-{status}"
 		use:sortable={{ group: 'kanban', onEnd }}
 	>
 		{#each tasks as task (task.id)}

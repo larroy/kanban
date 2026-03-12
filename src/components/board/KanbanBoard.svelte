@@ -18,7 +18,7 @@
 	});
 </script>
 
-<div class="flex gap-4 overflow-x-auto p-4">
+<div class="flex gap-4 overflow-x-auto p-4" data-testid="board">
 	<KanbanColumn
 		status="todo"
 		label="Todo"
