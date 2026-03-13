@@ -36,7 +36,7 @@
 			});
 			if (res.ok) {
 				const task = await res.json();
-				const assignee = data.users.find(u => u.id === newAssigneeId) ?? null;
+				const assignee = data.users.find((u: { id: number }) => u.id === newAssigneeId) ?? null;
 				tasks = [...tasks, {
 					...task,
 					assignee: assignee ? { id: assignee.id, name: assignee.name, color: assignee.color } : null

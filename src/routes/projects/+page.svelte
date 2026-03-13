@@ -2,14 +2,14 @@
 	import type { PageData } from './$types';
 	import ProjectCard from '$components/projects/ProjectCard.svelte';
 	import CreateProjectModal from '$components/projects/CreateProjectModal.svelte';
-	import type { ProjectWithStats } from '$lib/types.js';
+	import type { Project, ProjectWithStats } from '$lib/types.js';
 
 	let { data }: { data: PageData } = $props();
 
 	let projects = $state<ProjectWithStats[]>(data.projects);
 	let createOpen = $state(false);
 
-	function onCreated(project: ProjectWithStats) {
+	function onCreated(project: Project) {
 		projects = [...projects, { ...project, totalTasks: 0, doneTasks: 0 }];
 	}
 </script>

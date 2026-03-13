@@ -1,12 +1,13 @@
 <script lang="ts">
 	import Modal from '../shared/Modal.svelte';
+	import type { Project } from '$lib/types.js';
 
 	let {
 		open = $bindable(false),
 		oncreated
 	}: {
 		open: boolean;
-		oncreated: (project: { id: number; name: string }) => void;
+		oncreated: (project: Project) => void;
 	} = $props();
 
 	let name = $state('');
