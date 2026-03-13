@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "husky",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "playwright test",
@@ -22,6 +22,8 @@
 		"@types/pg": "^8.18.0",
 		"@types/sortablejs": "^1.15.9",
 		"drizzle-kit": "^0.31.9",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.3.3",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
 		"tailwindcss": "^4.2.1",
@@ -33,5 +35,8 @@
 		"drizzle-orm": "^0.45.1",
 		"pg": "^8.20.0",
 		"sortablejs": "^1.15.7"
+	},
+	"lint-staged": {
+		"*.{ts,svelte}": "bash -c 'svelte-kit sync && svelte-check --tsconfig ./tsconfig.json'"
 	}
 }

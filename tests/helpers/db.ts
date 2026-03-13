@@ -20,7 +20,7 @@
 
 import pg from 'pg';
 
-const DB_URL = 'postgres:///kanban?host=/var/run/postgresql';
+const DB_URL = process.env.DATABASE_URL ?? 'postgres:///kanban?host=/var/run/postgresql';
 
 export type SeedData = {
 	projectId: number;
