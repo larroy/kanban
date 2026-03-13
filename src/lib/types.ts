@@ -10,4 +10,5 @@ export type ProjectWithStats = {
 	updatedAt: Date;
 	totalTasks: number;
 	doneTasks: number;
+	lastTaskCompletedAt?: Date | null;
 };

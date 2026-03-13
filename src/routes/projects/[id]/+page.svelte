@@ -15,9 +15,58 @@
 	let newAssigneeId = $state<number | null>(null);
 	let adding = $state(false);
 
+	// Tab state
+	let activeTab = $state<'tasks' | 'settings'>('tasks');
+
+	// Settings form state
+	let editName = $state(project.name);
+	let editDesc = $state(project.description ?? '');
+	let saving = $state(false);
+	let saveMessage = $state('');
+
 	const todoTasks = $derived(tasks.filter(t => t.status === 'todo').sort((a, b) => a.position - b.position));
 	const doingTasks = $derived(tasks.filter(t => t.status === 'doing').sort((a, b) => a.position - b.position));
 	const doneTasks = $derived(tasks.filter(t => t.status === 'done').sort((a, b) => a.position - b.position));
+
+	const settingsChanged = $derived(editName !== project.name || editDesc !== (project.description ?? ''));
+
+	function formatDate(date: Date | string | null | undefined): string {
+		if (!date) return 'Never';
+		const d = typeof date === 'string' ? new Date(date) : date;
+		return d.toLocaleDateString('en-US', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	async function saveSettings() {
+		if (!editName.trim() || !settingsChanged) return;
+		saving = true;
+		saveMessage = '';
+		try {
+			const res = await fetch(`/api/projects/${project.id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: editName.trim(),
+					description: editDesc.trim() || null
+				})
+			});
+			if (res.ok) {
+				const updated = await res.json();
+				project = { ...project, name: updated.name, description: updated.description };
+				editName = project.name;
+				editDesc = project.description ?? '';
+				saveMessage = 'Saved';
+				setTimeout(() => (saveMessage = ''), 2000);
+			}
+		} finally {
+			saving = false;
+		}
+	}
 
 	async function addTask() {
 		if (!newTitle.trim()) return;
@@ -83,12 +132,14 @@
 					<p class="mt-1 text-sm text-gray-600">{project.description}</p>
 				{/if}
 			</div>
-			<button
-				onclick={() => (addOpen = true)}
-				class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-			>
-				+ Add Task
-			</button>
+			{#if activeTab === 'tasks'}
+				<button
+					onclick={() => (addOpen = true)}
+					class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+				>
+					+ Add Task
+				</button>
+			{/if}
 		</div>
 		<div class="mt-3 flex items-center gap-4 text-sm text-gray-500">
 			<span>{tasks.length} total tasks</span>
@@ -107,45 +158,144 @@
 		</div>
 	</div>
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-		{#each [{ label: 'Todo', tasks: todoTasks, color: 'bg-gray-400' }, { label: 'Doing', tasks: doingTasks, color: 'bg-blue-500' }, { label: 'Done', tasks: doneTasks, color: 'bg-green-500' }] as col}
-			<div class="rounded-xl bg-gray-50 p-4">
-				<div class="mb-3 flex items-center gap-2">
-					<span class="h-2.5 w-2.5 rounded-full {col.color}"></span>
-					<h2 class="font-semibold text-gray-800">{col.label}</h2>
-					<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
-						{col.tasks.length}
-					</span>
-				</div>
-				<div class="space-y-2">
-					{#each col.tasks as task (task.id)}
-						<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-							<div class="flex items-start justify-between gap-2">
-								<p class="text-sm font-medium text-gray-900">{task.title}</p>
-								<button
-									onclick={() => deleteTask(task.id)}
-									class="shrink-0 rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-400"
-									title="Delete"
-								>
-									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-									</svg>
-								</button>
-							</div>
-							{#if task.description}
-								<p class="mt-1 text-xs text-gray-500">{task.description}</p>
-							{/if}
-							{#if task.assignee}
-								<div class="mt-2 flex justify-end">
-									<UserBadge user={task.assignee} />
+	<!-- Tabs -->
+	<div class="mb-6 border-b border-gray-200">
+		<nav class="-mb-px flex gap-6">
+			<button
+				onclick={() => (activeTab = 'tasks')}
+				class="border-b-2 pb-3 text-sm font-medium transition-colors {activeTab === 'tasks'
+					? 'border-indigo-500 text-indigo-600'
+					: 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
+			>
+				Tasks
+			</button>
+			<button
+				onclick={() => (activeTab = 'settings')}
+				class="border-b-2 pb-3 text-sm font-medium transition-colors {activeTab === 'settings'
+					? 'border-indigo-500 text-indigo-600'
+					: 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
+			>
+				Settings
+			</button>
+		</nav>
+	</div>
+
+	{#if activeTab === 'tasks'}
+		<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+			{#each [{ label: 'Todo', tasks: todoTasks, color: 'bg-gray-400' }, { label: 'Doing', tasks: doingTasks, color: 'bg-blue-500' }, { label: 'Done', tasks: doneTasks, color: 'bg-green-500' }] as col}
+				<div class="rounded-xl bg-gray-50 p-4">
+					<div class="mb-3 flex items-center gap-2">
+						<span class="h-2.5 w-2.5 rounded-full {col.color}"></span>
+						<h2 class="font-semibold text-gray-800">{col.label}</h2>
+						<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+							{col.tasks.length}
+						</span>
+					</div>
+					<div class="space-y-2">
+						{#each col.tasks as task (task.id)}
+							<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+								<div class="flex items-start justify-between gap-2">
+									<p class="text-sm font-medium text-gray-900">{task.title}</p>
+									<button
+										onclick={() => deleteTask(task.id)}
+										class="shrink-0 rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-400"
+										title="Delete"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
 								</div>
-							{/if}
-						</div>
-					{/each}
+								{#if task.description}
+									<p class="mt-1 text-xs text-gray-500">{task.description}</p>
+								{/if}
+								{#if task.assignee}
+									<div class="mt-2 flex justify-end">
+										<UserBadge user={task.assignee} />
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		</div>
+	{:else}
+		<!-- Settings Tab -->
+		<div class="max-w-2xl space-y-8">
+			<!-- Project Info -->
+			<div class="rounded-xl border border-gray-200 bg-white p-6">
+				<h3 class="text-base font-semibold text-gray-900 mb-4">Project Details</h3>
+				<div class="space-y-4">
+					<div>
+						<label for="project-name" class="block text-sm font-medium text-gray-700">Name</label>
+						<input
+							id="project-name"
+							class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+							bind:value={editName}
+						/>
+					</div>
+					<div>
+						<label for="project-desc" class="block text-sm font-medium text-gray-700">Description</label>
+						<textarea
+							id="project-desc"
+							class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+							rows="3"
+							bind:value={editDesc}
+						></textarea>
+					</div>
+					<div class="flex items-center gap-3">
+						<button
+							onclick={saveSettings}
+							disabled={saving || !editName.trim() || !settingsChanged}
+							class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+						>
+							{saving ? 'Saving…' : 'Save Changes'}
+						</button>
+						{#if saveMessage}
+							<span class="text-sm text-green-600">{saveMessage}</span>
+						{/if}
+					</div>
 				</div>
 			</div>
-		{/each}
-	</div>
+
+			<!-- Timestamps -->
+			<div class="rounded-xl border border-gray-200 bg-white p-6">
+				<h3 class="text-base font-semibold text-gray-900 mb-4">Timeline</h3>
+				<dl class="space-y-3">
+					<div class="flex items-center justify-between">
+						<dt class="text-sm text-gray-500">Created</dt>
+						<dd class="text-sm font-medium text-gray-900">{formatDate(project.createdAt)}</dd>
+					</div>
+					<div class="flex items-center justify-between">
+						<dt class="text-sm text-gray-500">Last task completed</dt>
+						<dd class="text-sm font-medium text-gray-900">{formatDate(project.lastTaskCompletedAt)}</dd>
+					</div>
+				</dl>
+			</div>
+
+			<!-- Status -->
+			<div class="rounded-xl border border-gray-200 bg-white p-6">
+				<h3 class="text-base font-semibold text-gray-900 mb-4">Status</h3>
+				<div class="flex items-center gap-3">
+					<span class="rounded-full px-3 py-1 text-sm font-medium
+						{project.status === 'done' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">
+						{project.status === 'done' ? 'Completed' : 'Active'}
+					</span>
+					<span class="text-sm text-gray-500">
+						{#if project.status === 'done'}
+							All tasks are done
+						{:else}
+							{doneTasks.length} of {tasks.length} tasks completed
+						{/if}
+					</span>
+				</div>
+				<p class="mt-2 text-xs text-gray-400">
+					Status is automatically managed based on task completion.
+				</p>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <Modal bind:open={addOpen} title="Add Task">

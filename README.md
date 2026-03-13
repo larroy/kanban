@@ -14,6 +14,22 @@ npm run dev
 npm run dev -- --open
 ```
 
+## Linting and Pre-commit Checks
+
+Type checking runs automatically before each commit via a Husky pre-commit hook and lint-staged. It runs `svelte-check` on all staged `.ts` and `.svelte` files.
+
+To run type checking manually:
+
+```sh
+npm run check
+```
+
+To run the pre-commit hook manually (checks only staged files):
+
+```sh
+npx lint-staged
+```
+
 ## Building
 
 To create a production version of your app:
