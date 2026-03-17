@@ -11,6 +11,7 @@ export function sortable(node: HTMLElement, options: SortableOptions) {
 		animation: 150,
 		ghostClass: 'opacity-40',
 		dragClass: 'shadow-xl',
+		draggable: '[data-id]',
 		onEnd: options.onEnd
 	});
 

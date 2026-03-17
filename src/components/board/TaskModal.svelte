@@ -1,17 +1,23 @@
 <script lang="ts">
 	import Modal from '../shared/Modal.svelte';
-	import type { TaskWithAssignee, User } from '$lib/types.js';
+	import type { TaskWithAssignee, User, Project } from '$lib/types.js';
 	import { board } from '$lib/board.svelte.js';
 
 	let {
 		task = $bindable<TaskWithAssignee | null>(null),
 		users,
+		projects,
 		onclose
 	}: {
 		task: TaskWithAssignee | null;
 		users: User[];
+		projects: Project[];
 		onclose?: () => void;
 	} = $props();
+
+	let projectName = $derived(
+		task ? (projects.find(p => p.id === task!.projectId)?.name ?? 'Unknown') : ''
+	);
 
 	let open = $derived(task !== null);
 	let editing = $state(false);
@@ -127,12 +133,15 @@
 					</div>
 				</div>
 			{:else}
-				<div>
+				<div class="flex items-center gap-2">
 					<span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium
 						{task.status === 'todo' ? 'bg-gray-100 text-gray-700' :
 						 task.status === 'doing' ? 'bg-blue-100 text-blue-700' :
 						 'bg-green-100 text-green-700'}">
 						{task.status}
+					</span>
+					<span class="inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+						{projectName}
 					</span>
 				</div>
 				{#if task.description}

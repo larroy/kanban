@@ -15,6 +15,7 @@
 	class="w-full cursor-grab rounded-lg border border-gray-200 bg-white p-3 text-left shadow-sm hover:border-indigo-300 hover:shadow-md active:cursor-grabbing"
 	onclick={() => onclick(task)}
 	data-id={task.id}
+	data-project-id={task.projectId}
 	data-testid="task-card-{task.id}"
 >
 	<p class="text-sm font-medium text-gray-900">{task.title}</p>

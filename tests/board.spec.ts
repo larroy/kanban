@@ -31,7 +31,10 @@ import {
 	seedTestData,
 	cleanupTestData,
 	getTaskFromDb,
+	seedMultiProjectData,
+	cleanupMultiProjectData,
 	type SeedData,
+	type MultiProjectSeedData,
 } from './helpers/db.js';
 
 // ---------------------------------------------------------------------------
@@ -755,5 +758,179 @@ test.describe('Task API', () => {
 
 		const row = await getTaskFromDb(seed.tasks.todo2Id);
 		expect(row).toBeNull();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 9. Project grouping — tasks stay under the correct project header after moves
+// ---------------------------------------------------------------------------
+
+test.describe('Project grouping after moves', () => {
+	/**
+	 * These tests use a separate seed with two projects whose tasks have
+	 * interleaved flat positions in the todo column:
+	 *   Alpha Task 1  pos 0
+	 *   Beta  Task 1  pos 1
+	 *   Alpha Task 2  pos 2
+	 *   Beta  Task 2  pos 3
+	 *
+	 * Grouped visual order (Alpha is more recent):
+	 *   [Alpha] Alpha Task 1, Alpha Task 2
+	 *   [Beta]  Beta Task 1,  Beta Task 2
+	 *
+	 * The flat position order (0,1,2,3) does NOT match the visual order,
+	 * which is the root cause of the grouping bug.
+	 */
+	let multiSeed: MultiProjectSeedData;
+
+	test.beforeEach(async () => {
+		multiSeed = await seedMultiProjectData();
+	});
+
+	test.afterEach(async () => {
+		await cleanupMultiProjectData(multiSeed);
+	});
+
+	/**
+	 * Helper: for a given column, get task card project-ids in DOM order
+	 * and assert that tasks from the same project are contiguous (grouped).
+	 */
+	async function assertTasksGroupedByProject(page: Page, status: 'todo' | 'doing' | 'done') {
+		const projectIds = await page
+			.getByTestId(`task-list-${status}`)
+			.locator('[data-project-id][data-id]')
+			.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.projectId));
+
+		// Project ids must be contiguous: once a project id changes, it must not reappear
+		const seen = new Set<string>();
+		let current = '';
+		for (const pid of projectIds) {
+			if (pid !== current) {
+				expect(
+					seen.has(pid!),
+					`Tasks from project ${pid} are not contiguous in column ${status} — grouping is broken. Order: [${projectIds.join(', ')}]`
+				).toBe(false);
+				if (current) seen.add(current);
+				current = pid!;
+			}
+		}
+	}
+
+	test('tasks should be grouped by project on initial load', async ({ page }) => {
+		await page.goto('/');
+		await page.waitForSelector('[data-testid="board"]');
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.alphaTask1Id}"]`);
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.betaTask1Id}"]`);
+
+		await assertTasksGroupedByProject(page, 'todo');
+	});
+
+	test('tasks should remain grouped by project after a cross-column API move', async ({
+		page,
+	}) => {
+		// Move Beta Task 1 to doing via API — this changes flat positions in todo
+		const res = await page.request.patch(
+			`/api/tasks/${multiSeed.tasks.betaTask1Id}/move`,
+			{ data: { status: 'doing', position: 0 } }
+		);
+		expect(res.ok()).toBeTruthy();
+
+		await page.goto('/');
+		await page.waitForSelector('[data-testid="board"]');
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.alphaTask1Id}"]`);
+		await page.waitForSelector(
+			`[data-testid="task-list-doing"] [data-testid="task-card-${multiSeed.tasks.betaTask1Id}"]`
+		);
+
+		await assertTasksGroupedByProject(page, 'todo');
+	});
+
+	test('within-group order should update correctly after a same-column move', async ({
+		page,
+	}) => {
+		// This tests the core fix: with interleaved positions, a same-column
+		// reorder within a project group should produce correct within-group order.
+		//
+		// Initial flat positions: A1=0, B1=1, A2=2, B2=3
+		// Grouped visual: [Alpha] A1(vi=0) A2(vi=1) [Beta] B1(vi=2) B2(vi=3)
+		//
+		// We want to swap Beta tasks: move B2 before B1.
+		// With the fix, the onEnd handler translates visual index 2 to flat
+		// position 1 (B1's position), so B2 ends up at pos 1 and B1 shifts to 2.
+		// Without the fix, visual index 2 maps to flat position 2, which shifts
+		// A2 instead of B1, leaving B1 still before B2.
+
+		// Move B2 (pos 3) to position 1 (before B1) — simulates the corrected onEnd
+		const res = await page.request.patch(
+			`/api/tasks/${multiSeed.tasks.betaTask2Id}/move`,
+			{ data: { status: 'todo', position: 1 } }
+		);
+		expect(res.ok()).toBeTruthy();
+
+		await page.goto('/');
+		await page.waitForSelector('[data-testid="board"]');
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.betaTask2Id}"]`);
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.betaTask1Id}"]`);
+
+		// Tasks should still be grouped
+		await assertTasksGroupedByProject(page, 'todo');
+
+		// Beta Task 2 should now appear before Beta Task 1 within the Beta group
+		const todoCards = await page
+			.getByTestId('task-list-todo')
+			.locator('[data-id]')
+			.evaluateAll((els) =>
+				els.map((el) => ({
+					id: (el as HTMLElement).dataset.id,
+					projectId: (el as HTMLElement).dataset.projectId,
+				}))
+			);
+
+		const betaTasks = todoCards.filter(
+			(c) => c.projectId === String(multiSeed.betaProjectId)
+		);
+		expect(betaTasks.length).toBe(2);
+		expect(Number(betaTasks[0].id)).toBe(multiSeed.tasks.betaTask2Id);
+		expect(Number(betaTasks[1].id)).toBe(multiSeed.tasks.betaTask1Id);
+	});
+
+	test('upward move within a project group should produce correct ordering', async ({
+		page,
+	}) => {
+		// Move Alpha Task 2 (pos 2) to position 0 (before Alpha Task 1) — an
+		// upward same-column move. After the move Alpha Task 2 should appear
+		// before Alpha Task 1 within the Alpha group, and all grouping
+		// should remain intact.
+		const res = await page.request.patch(
+			`/api/tasks/${multiSeed.tasks.alphaTask2Id}/move`,
+			{ data: { status: 'todo', position: 0 } }
+		);
+		expect(res.ok()).toBeTruthy();
+
+		await page.goto('/');
+		await page.waitForSelector('[data-testid="board"]');
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.alphaTask2Id}"]`);
+		await page.waitForSelector(`[data-testid="task-card-${multiSeed.tasks.alphaTask1Id}"]`);
+
+		// Tasks should still be grouped
+		await assertTasksGroupedByProject(page, 'todo');
+
+		// Alpha Task 2 should now appear before Alpha Task 1 within the Alpha group
+		const todoCards = await page
+			.getByTestId('task-list-todo')
+			.locator('[data-id]')
+			.evaluateAll((els) =>
+				els.map((el) => ({
+					id: (el as HTMLElement).dataset.id,
+					projectId: (el as HTMLElement).dataset.projectId,
+				}))
+			);
+
+		const alphaTasks = todoCards.filter(
+			(c) => c.projectId === String(multiSeed.alphaProjectId)
+		);
+		expect(alphaTasks.length).toBe(2);
+		expect(Number(alphaTasks[0].id)).toBe(multiSeed.tasks.alphaTask2Id);
+		expect(Number(alphaTasks[1].id)).toBe(multiSeed.tasks.alphaTask1Id);
 	});
 });

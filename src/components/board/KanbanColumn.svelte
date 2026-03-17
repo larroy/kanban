@@ -31,23 +31,82 @@
 	let newAssigneeId = $state<number | null>(null);
 	let adding = $state(false);
 
+	// Group tasks by project, sorted by most recent task activity descending
+	let groupedTasks = $derived.by(() => {
+		const groups = new Map<number, TaskWithAssignee[]>();
+		for (const task of tasks) {
+			if (!groups.has(task.projectId)) {
+				groups.set(task.projectId, []);
+			}
+			groups.get(task.projectId)!.push(task);
+		}
+
+		const result: { projectId: number; projectName: string; tasks: TaskWithAssignee[]; lastActivity: number }[] = [];
+		for (const [projectId, groupTasks] of groups) {
+			const project = projects.find(p => p.id === projectId);
+			const maxUpdatedAt = Math.max(...groupTasks.map(t => new Date(t.updatedAt).getTime()));
+			result.push({
+				projectId,
+				projectName: project?.name ?? 'Unknown',
+				tasks: groupTasks,
+				lastActivity: maxUpdatedAt
+			});
+		}
+
+		result.sort((a, b) => b.lastActivity - a.lastActivity);
+		return result;
+	});
+
+	/**
+	 * Build the visual (grouped) order for a set of column tasks.
+	 * Groups by project sorted by most-recent task activity, then by position within each group.
+	 */
+	function buildVisualOrder(columnTasks: TaskWithAssignee[]): TaskWithAssignee[] {
+		const groups = new Map<number, TaskWithAssignee[]>();
+		for (const t of columnTasks) {
+			if (!groups.has(t.projectId)) groups.set(t.projectId, []);
+			groups.get(t.projectId)!.push(t);
+		}
+		const sorted = [...groups.entries()]
+			.map(([, gTasks]) => ({
+				tasks: gTasks,
+				lastActivity: Math.max(...gTasks.map(t => new Date(t.updatedAt).getTime()))
+			}))
+			.sort((a, b) => b.lastActivity - a.lastActivity);
+		return sorted.flatMap(g => g.tasks);
+	}
+
 	function onEnd(evt: import('sortablejs').SortableEvent) {
 		const id = parseInt(evt.item.dataset.id ?? '');
 		const toStatus = evt.to.dataset.status as string;
-		const newIndex = evt.newIndex ?? 0;
+		const visualIndex = evt.newDraggableIndex ?? evt.newIndex ?? 0;
 
-		// Revert SortableJS's DOM change — let Svelte's reactivity own the DOM
-		if (evt.from !== evt.to) {
-			// Cross-column: remove entirely so Svelte recreates in the right column
-			evt.item.remove();
+		// Remove the dragged element and let Svelte recreate it from state.
+		// The previous approach of reverting via insertBefore(children[oldIndex])
+		// breaks for upward same-column moves: project headers shift children
+		// indices so the revert puts the card outside its {#each} block boundary,
+		// corrupting Svelte's reconciliation.
+		evt.item.remove();
+
+		if (isNaN(id)) return;
+
+		// Build the target column's visual order (excluding the moved task)
+		// so we can translate the visual index to the correct flat position.
+		const targetTasks = board.tasks
+			.filter(t => t.status === toStatus && t.id !== id)
+			.sort((a, b) => a.position - b.position);
+		const visualOrder = buildVisualOrder(targetTasks);
+
+		let newPosition: number;
+		if (visualOrder.length === 0 || visualIndex >= visualOrder.length) {
+			newPosition = visualOrder.length > 0
+				? Math.max(...visualOrder.map(t => t.position)) + 1
+				: 0;
 		} else {
-			// Same-column: revert to original position
-			evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] ?? null);
+			newPosition = visualOrder[visualIndex].position;
 		}
 
-		if (!isNaN(id)) {
-			board.moveTask(id, toStatus, newIndex);
-		}
+		board.moveTask(id, toStatus, newPosition);
 	}
 
 	async function addTask() {
@@ -110,13 +169,19 @@
 		data-testid="task-list-{status}"
 		use:sortable={{ group: 'kanban', onEnd }}
 	>
-		{#each tasks as task (task.id)}
-			<TaskCard {task} onclick={(t) => (selectedTask = t)} />
+		{#each groupedTasks as group}
+			<div class="flex items-center gap-1.5 pt-1 first:pt-0" data-project-header>
+				<span class="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">{group.projectName}</span>
+				<span class="h-px flex-1 bg-gray-200"></span>
+			</div>
+			{#each group.tasks as task (task.id)}
+				<TaskCard {task} onclick={(t) => (selectedTask = t)} />
+			{/each}
 		{/each}
 	</div>
 </div>
 
-<TaskModal bind:task={selectedTask} {users} />
+<TaskModal bind:task={selectedTask} {users} {projects} />
 
 <Modal bind:open={addOpen} title="Add Task to {label}">
 	<div class="space-y-3">
