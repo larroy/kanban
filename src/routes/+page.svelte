@@ -13,5 +13,5 @@
 	<div class="mb-4 flex items-center justify-between">
 		<h1 class="text-xl font-bold text-gray-900">Board</h1>
 	</div>
-	<KanbanBoard initialTasks={data.tasks} users={data.users} projects={data.projects} />
+	<KanbanBoard initialTasks={data.tasks} users={data.users} projects={data.projects} projectsWithStats={data.projects} />
 </div>

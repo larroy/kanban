@@ -12,7 +12,8 @@ export async function getProjects() {
 			createdAt: projects.createdAt,
 			updatedAt: projects.updatedAt,
 			totalTasks: count(tasks.id),
-			doneTasks: sql<number>`COUNT(CASE WHEN ${tasks.status} = 'done' THEN 1 END)`.mapWith(Number)
+			doneTasks: sql<number>`COUNT(CASE WHEN ${tasks.status} = 'done' THEN 1 END)`.mapWith(Number),
+			lastActivityAt: sql<Date | null>`MAX(${tasks.updatedAt})`
 		})
 		.from(projects)
 		.leftJoin(tasks, eq(tasks.projectId, projects.id))

@@ -1,16 +1,19 @@
 <script lang="ts">
-	import type { TaskWithAssignee, User, Project } from '$lib/types.js';
+	import type { TaskWithAssignee, User, Project, ProjectWithStats } from '$lib/types.js';
 	import { board } from '$lib/board.svelte.js';
 	import KanbanColumn from './KanbanColumn.svelte';
+	import ProjectListWidget from './ProjectListWidget.svelte';
 
 	let {
 		initialTasks,
 		users,
-		projects
+		projects,
+		projectsWithStats
 	}: {
 		initialTasks: TaskWithAssignee[];
 		users: User[];
 		projects: Project[];
+		projectsWithStats?: ProjectWithStats[];
 	} = $props();
 
 	$effect(() => {
@@ -43,4 +46,7 @@
 		{users}
 		{projects}
 	/>
+	{#if projectsWithStats}
+		<ProjectListWidget projects={projectsWithStats} />
+	{/if}
 </div>
