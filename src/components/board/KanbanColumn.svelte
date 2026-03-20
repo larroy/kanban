@@ -142,7 +142,7 @@
 	}
 </script>
 
-<div class="flex w-80 shrink-0 flex-col rounded-xl bg-gray-50 p-3" data-testid="column-{status}">
+<div class="flex flex-1 min-w-64 flex-col rounded-xl bg-gray-50 p-3" data-testid="column-{status}">
 	<div class="mb-3 flex items-center justify-between">
 		<div class="flex items-center gap-2">
 			<span class="h-2.5 w-2.5 rounded-full {color}"></span>
